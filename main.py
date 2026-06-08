@@ -5,11 +5,12 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
-from openai import OpenAI
+from google import genai
 
-app = FastAPI(title="is-true API")
+# Inicializamos el servidor con el nombre oficial de tu app
+app = FastAPI(title="Is-True API - Buscador de la Verdad")
 
-# Permitir conexiones desde cualquier origen (esencial para que el frontend funcione)
+# Permitir conexiones desde la interfaz gráfica de Is-True
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -18,8 +19,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Inicializar cliente de OpenAI (se configurará la API Key en la plataforma de hosting)
-client = OpenAI()
+# Inicializamos el cliente de Google Gemini (requiere GEMINI_API_KEY en Render)
+client = genai.Client()
 SERPER_API_KEY = os.getenv("SERPER_API_KEY")
 
 class NewsCheckRequest(BaseModel):
@@ -43,7 +44,6 @@ def buscar_en_google(query: str) -> str:
     except Exception:
         return "Error al consultar fuentes en internet."
 
-# Ruta principal: Muestra la interfaz gráfica al entrar a la app
 @app.get("/", response_class=HTMLResponse)
 async def home():
     try:
@@ -52,7 +52,6 @@ async def home():
     except FileNotFoundError:
         return "HTML no encontrado. Asegúrate de tener index.html en la misma carpeta."
 
-# Ruta de procesamiento de la noticia
 @app.post("/verify")
 async def verify_news(request: NewsCheckRequest):
     texto_usuario = request.text.strip()
@@ -60,48 +59,44 @@ async def verify_news(request: NewsCheckRequest):
         raise HTTPException(status_code=400, detail="El texto está vacío.")
 
     try:
-        # 1. Extraer palabras clave para Google
-        res_query = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": "Genera términos de búsqueda eficaces para Google basados en el texto. Sé breve."},
-                {"role": "user", "content": texto_usuario}
-            ],
-            temperature=0.0
+        # 1. Is-True extrae las palabras clave con Gemini
+        prompt_query = f"Genera términos de búsqueda eficaces para Google basados en este texto. Sé muy breve y directo: {texto_usuario}"
+        res_query = client.models.generate_content(
+            model='gemini-1.5-flash',
+            contents=prompt_query,
         )
-        query = res_query.choices[0].message.content.strip()
+        query = res_query.text.strip()
         
-        # 2. Buscar en vivo en la web
+        # 2. Is-True busca pruebas en internet en tiempo real
         contexto_web = buscar_en_google(query)
         
-        # 3. Analizar y dar veredicto
-        system_instruction = (
-            "Eres un analista de datos de fact-checking. Contrasta el texto del usuario "
-            "con la información real de internet provista. Responde estrictamente en formato JSON."
-        )
-        
+        # 3. Veredicto final de Is-True
         user_prompt = f"""
+        Eres el analista principal de 'Is-True', una aplicación avanzada de fact-checking. 
+        Contrasta el texto del usuario con la información real de internet provista para determinar si es verdadero o falso.
+        
         TEXTO DEL USUARIO: "{texto_usuario}"
-        INFORMACIÓN EN INTERNET:
+        
+        INFORMACIÓN REAL EN INTERNET:
         {contexto_web}
         
-        Devuelve un JSON con:
-        - "verdict": "VERDADERO", "FALSO", "ENGAÑOSO" o "FALTA CONTEXTO"
-        - "confidence_score": (0 a 100)
-        - "explanation": (Explicación clara en español, máximo 3 frases)
+        Debes responder ESTRICTAMENTE con un objeto JSON que tenga exactamente esta estructura:
+        {{
+          "verdict": "VERDADERO" o "FALSO" o "ENGAÑOSO" o "FALTA CONTEXTO",
+          "confidence_score": (un número de 0 a 100),
+          "explanation": "Una explicación clara, objetiva y en español de máximo 3 frases explicando por qué Is-True llegó a este veredicto."
+        }}
         """
         
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": system_instruction},
-                {"role": "user", "content": user_prompt}
-            ],
-            response_format={"type": "json_object"},
-            temperature=0.1
+        response = client.models.generate_content(
+            model='gemini-1.5-flash',
+            contents=user_prompt,
+            config={
+                'response_mime_type': 'application/json'
+            }
         )
         
-        return json.loads(response.choices[0].message.content)
+        return json.loads(response.text.strip())
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)}
+        raise HTTPException(status_code=500, detail=str(e))
