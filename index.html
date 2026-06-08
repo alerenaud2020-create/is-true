@@ -1,0 +1,160 @@
+HTML
+
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>is-true - Detector de Fake News</title>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: #1e293b;
+            --text-color: #f8fafc;
+            --accent: #38bdf8;
+        }
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+        .container {
+            width: 100%;
+            max-width: 600px;
+            margin-top: 40px;
+        }
+        h1 { text-align: center; color: var(--accent); margin-bottom: 5px; }
+        p.subtitle { text-align: center; color: #94a3b8; margin-bottom: 30px; }
+        
+        .box {
+            background: var(--card-bg);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.3);
+        }
+        textarea {
+            width: 100%;
+            height: 120px;
+            background: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            color: white;
+            padding: 12px;
+            font-size: 16px;
+            box-sizing: border-box;
+            resize: none;
+        }
+        textarea:focus { border-color: var(--accent); outline: none; }
+        
+        button {
+            width: 100%;
+            background: var(--accent);
+            color: #0f172a;
+            border: none;
+            padding: 14px;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 8px;
+            margin-top: 15px;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+        button:hover { opacity: 0.9; }
+        button:disabled { background: #475569; cursor: not-allowed; }
+
+        /* Estilos del Resultado */
+        .result-card {
+            margin-top: 25px;
+            padding: 20px;
+            border-radius: 12px;
+            display: none;
+            animation: fadeIn 0.4s ease;
+        }
+        .badge {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+        .VERDADERO { background: #10b981; color: white; }
+        .FALSO { background: #ef4444; color: white; }
+        .ENGAÑOSO, .FALTA_CONTEXTO { background: #f59e0b; color: white; }
+        
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>🔍 is-true</h1>
+    <p class="subtitle">Pega una noticia, rumor o cadena de texto para verificar su veracidad en tiempo real.</p>
+    
+    <div class="box">
+        <textarea id="newsInput" placeholder="Introduce o pega el texto aquí..."></textarea>
+        <button id="verifyBtn" onclick="verificarNoticia()">Analizar en Tiempo Real</button>
+    </div>
+
+    <div id="resultCard" class="result-card" style="background: var(--card-bg);">
+        <span id="verdictBadge" class="badge">VERDICTO</span>
+        <div style="font-size: 14px; color: #94a3b8; margin-bottom: 10px;">
+            Certeza del análisis: <span id="confidenceText" style="font-weight: bold; color: white;">0%</span>
+        </div>
+        <p id="explanationText" style="line-height: 1.5; margin: 0;"></p>
+    </div>
+</div>
+
+<script>
+async function verificarNoticia() {
+    const textInput = document.getElementById("newsInput").value.trim();
+    const btn = document.getElementById("verifyBtn");
+    const resultCard = document.getElementById("resultCard");
+    
+    if(!textInput) { alert("Por favor, escribe algo para analizar."); return; }
+    
+    // Cambiar estado a "Cargando..."
+    btn.disabled = true;
+    btn.innerText = "Buscando en internet y analizando...";
+    resultCard.style.display = "none";
+
+    try {
+        // Hace la petición al backend en Python (funciona de manera local o en la nube)
+        const response = await fetch("/verify", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text: textInput })
+        });
+        
+        if(!response.ok) throw new Error("Error en el servidor");
+        
+        const data = await response.json();
+        
+        // Renderizar los datos devueltos por la IA en la pantalla
+        const badge = document.getElementById("verdictBadge");
+        badge.className = "badge " + data.verdict.replace(" ", "_");
+        badge.innerText = data.verdict;
+        
+        document.getElementById("confidenceText").innerText = data.confidence_score + "%";
+        document.getElementById("explanationText").innerText = data.explanation;
+        
+        // Mostrar la tarjeta de resultados con estilo animado
+        resultCard.style.display = "block";
+        
+    } catch (error) {
+        alert("Ocurrió un error al procesar tu solicitud. Inténtalo de nuevo.");
+    } finally {
+        // Restaurar botón
+        btn.disabled = false;
+        btn.innerText = "Analizar en Tiempo Real";
+    }
+}
+</script>
+
+</body>
+</html>
